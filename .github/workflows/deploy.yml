@@ -46,11 +46,21 @@ jobs:
 
     - name: Configurar kubectl
       run: |
-        echo "${{ secrets.MGC_KUBECONFIG }}" > kubeconfig.yaml
+        # Salva o arquivo de configuração do Kubernetes com caminho absoluto
+        echo "${{ secrets.MGC_KUBECONFIG }}" > $GITHUB_WORKSPACE/kubeconfig.yaml
+        
+        # Garante permissão adequada de leitura/escrita do arquivo
+        chmod 600 $GITHUB_WORKSPACE/kubeconfig.yaml
+        
+        # Exporta o KUBECONFIG globalmente para todas as etapas subsequentes do Job
+        echo "KUBECONFIG=$GITHUB_WORKSPACE/kubeconfig.yaml" >> $GITHUB_ENV
+
+    - name: Testar Conexão com o Cluster
+      run: |
+        kubectl cluster-info
 
     - name: Criar Secret do registry
       run: |
-        export KUBECONFIG=kubeconfig.yaml
         kubectl create secret docker-registry registry-secret \
           --docker-server=${{ env.REGISTRY }} \
           --docker-username=${{ secrets.MGC_REGISTRY_USER }} \
@@ -59,14 +69,12 @@ jobs:
 
     - name: Criar Secret do banco
       run: |
-        export KUBECONFIG=kubeconfig.yaml
         kubectl create secret generic db-secret \
           --from-literal=url=${{ secrets.DATABASE_URL }} \
           --dry-run=client -o yaml | kubectl apply -f -
 
     - name: Deploy no Kubernetes
       run: |
-        export KUBECONFIG=kubeconfig.yaml
         export MGC_REGISTRY_NAME=${{ secrets.MGC_REGISTRY_NAME }}
         export IMAGE_TAG=${{ github.sha }}
         envsubst < k8s/app.yaml | kubectl apply -f -
